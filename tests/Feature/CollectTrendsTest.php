@@ -2,14 +2,14 @@
 
 namespace Tests\Feature;
 
+use App\Jobs\ResolveTrendArticleJob;
 use App\Models\Region;
 use App\Models\Trend;
 use App\Models\TrendArticle;
-use App\Services\News\FakeNewsResolver;
-use App\Services\News\NewsResolverInterface;
 use App\Services\Trends\FakeTrendsClient;
 use App\Services\Trends\TrendsClientInterface;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
 class CollectTrendsTest extends TestCase
@@ -18,33 +18,23 @@ class CollectTrendsTest extends TestCase
 
     private FakeTrendsClient $fakeTrends;
 
-    private FakeNewsResolver $fakeNews;
-
     protected function setUp(): void
     {
         parent::setUp();
 
         $this->fakeTrends = new FakeTrendsClient;
-        $this->fakeNews = new FakeNewsResolver;
-
         $this->app->bind(TrendsClientInterface::class, fn () => $this->fakeTrends);
-        $this->app->bind(NewsResolverInterface::class, fn () => $this->fakeNews);
+
+        Queue::fake();
     }
 
-    public function test_first_run_creates_all_trends_as_active(): void
+    public function test_first_run_creates_all_trends_as_active_and_dispatches_jobs(): void
     {
         $region = Region::create(['code' => 'BR', 'name' => 'Brasil']);
 
         $this->fakeTrends->stubSuccessForRegion('BR', [
             ['term' => 'Flamengo', 'rank' => 1, 'search_volume' => 100000],
             ['term' => 'Carnaval', 'rank' => 2, 'search_volume' => 50000],
-        ]);
-
-        $this->fakeNews->stubResult([
-            'url' => 'https://example.com/news',
-            'title' => 'Flamengo vence',
-            'site_name' => 'Example.com',
-            'published_at' => '2025-07-14T12:00:00Z',
         ]);
 
         $this->artisan('trends:collect', ['--region' => 'BR'])
@@ -67,7 +57,12 @@ class CollectTrendsTest extends TestCase
         $this->assertNotNull($flamengo->first_seen_at);
         $this->assertNotNull($flamengo->last_seen_at);
 
-        $this->assertCount(1, TrendArticle::where('trend_id', $flamengo->id)->get());
+        Queue::assertPushed(ResolveTrendArticleJob::class, 8);
+
+        Queue::assertPushed(ResolveTrendArticleJob::class, function (ResolveTrendArticleJob $job) use ($flamengo) {
+            return $job->trend->id === $flamengo->id
+                && $job->regionCode === 'BR';
+        });
     }
 
     public function test_second_run_updates_existing_and_deactivates_missing(): void
@@ -78,7 +73,6 @@ class CollectTrendsTest extends TestCase
             ['term' => 'Flamengo', 'rank' => 1, 'search_volume' => 100000],
             ['term' => 'Carnaval', 'rank' => 2, 'search_volume' => 50000],
         ]);
-        $this->fakeNews->stubEmpty();
 
         $this->artisan('trends:collect', ['--region' => 'BR']);
 
@@ -92,6 +86,8 @@ class CollectTrendsTest extends TestCase
             ->first();
         $this->assertTrue($flamengo4h->is_active);
         $this->assertTrue($carnaval4h->is_active);
+
+        Queue::fake();
 
         $this->fakeTrends->stubSuccessForRegion('BR', [
             ['term' => 'Flamengo', 'rank' => 3, 'search_volume' => 80000],
@@ -117,24 +113,12 @@ class CollectTrendsTest extends TestCase
         $this->assertEquals('Eleições', $eleicoes4h->term);
     }
 
-    public function test_article_not_duplicated_on_second_run(): void
+    public function test_job_not_dispatched_again_for_trends_with_articles(): void
     {
         $region = Region::create(['code' => 'BR', 'name' => 'Brasil']);
 
         $this->fakeTrends->stubSuccessForRegion('BR', [
             ['term' => 'Flamengo', 'rank' => 1, 'search_volume' => 100000],
-        ]);
-        $this->fakeNews->stubResult([
-            'url' => 'https://example.com/news',
-            'title' => 'Flamengo vence',
-            'site_name' => 'Example.com',
-            'published_at' => null,
-        ]);
-
-        $this->artisan('trends:collect', ['--region' => 'BR']);
-
-        $this->fakeTrends->stubSuccessForRegion('BR', [
-            ['term' => 'Flamengo', 'rank' => 2, 'search_volume' => 90000],
         ]);
 
         $this->artisan('trends:collect', ['--region' => 'BR']);
@@ -143,6 +127,30 @@ class CollectTrendsTest extends TestCase
             ->where('region_id', $region->id)
             ->first();
 
-        $this->assertCount(1, TrendArticle::where('trend_id', $flamengo->id)->get());
+        Queue::assertPushed(ResolveTrendArticleJob::class, 4);
+        Queue::assertPushed(ResolveTrendArticleJob::class, function (ResolveTrendArticleJob $job) use ($flamengo) {
+            return $job->trend->id === $flamengo->id && $job->regionCode === 'BR';
+        });
+
+        Trend::where('region_id', $region->id)->each(function (Trend $t) {
+            TrendArticle::create([
+                'trend_id' => $t->id,
+                'url' => 'https://example.com/news',
+                'site_name' => 'Example.com',
+                'title' => 'Article for ' . $t->term,
+                'position' => 1,
+                'fetched_at' => now(),
+            ]);
+        });
+
+        Queue::fake();
+
+        $this->fakeTrends->stubSuccessForRegion('BR', [
+            ['term' => 'Flamengo', 'rank' => 2, 'search_volume' => 90000],
+        ]);
+
+        $this->artisan('trends:collect', ['--region' => 'BR']);
+
+        Queue::assertPushed(ResolveTrendArticleJob::class, 0);
     }
 }

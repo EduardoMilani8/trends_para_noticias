@@ -2,13 +2,11 @@
 
 namespace App\Console\Commands;
 
+use App\Jobs\ResolveTrendArticleJob;
 use App\Models\Region;
 use App\Models\Trend;
-use App\Models\TrendArticle;
-use App\Services\News\NewsResolverInterface;
 use App\Services\Trends\TrendsClientInterface;
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class CollectTrends extends Command
@@ -23,17 +21,16 @@ class CollectTrends extends Command
 
     private int $updated = 0;
 
-    private int $articlesResolved = 0;
+    private int $dispatched = 0;
 
     private int $failed = 0;
 
     public function handle(
         TrendsClientInterface $trendsClient,
-        NewsResolverInterface $newsResolver,
     ): int {
         $this->created = 0;
         $this->updated = 0;
-        $this->articlesResolved = 0;
+        $this->dispatched = 0;
         $this->failed = 0;
 
         $regionQuery = Region::query();
@@ -51,11 +48,11 @@ class CollectTrends extends Command
 
         foreach ($regions as $region) {
             foreach (self::PERIODS as $period) {
-                $this->collectForRegion($region, $period, $trendsClient, $newsResolver);
+                $this->collectForRegion($region, $period, $trendsClient);
             }
         }
 
-        $this->info("Done. Created: {$this->created}, Updated: {$this->updated}, Articles: {$this->articlesResolved}, Failed: {$this->failed}");
+        $this->info("Done. Created: {$this->created}, Updated: {$this->updated}, Dispatched: {$this->dispatched}, Failed: {$this->failed}");
 
         return self::SUCCESS;
     }
@@ -64,7 +61,6 @@ class CollectTrends extends Command
         Region $region,
         string $period,
         TrendsClientInterface $trendsClient,
-        NewsResolverInterface $newsResolver,
     ): void {
         try {
             $items = $trendsClient->trendingNow($region->code);
@@ -111,7 +107,8 @@ class CollectTrends extends Command
             }
 
             if ($trend->trendArticles()->count() === 0) {
-                $this->resolveArticle($trend, $region->code, $newsResolver);
+                ResolveTrendArticleJob::dispatch($trend, $region->code);
+                $this->dispatched++;
             }
         }
 
@@ -119,35 +116,5 @@ class CollectTrends extends Command
             ->where('period', $period)
             ->whereNotIn('normalized_term', $incomingTerms)
             ->update(['is_active' => false]);
-    }
-
-    private function resolveArticle(
-        Trend $trend,
-        string $regionCode,
-        NewsResolverInterface $newsResolver,
-    ): void {
-        try {
-            $article = $newsResolver->findTopArticle($trend->term, $regionCode);
-        } catch (\Throwable $e) {
-            $this->warn("Article resolution failed for '{$trend->term}': {$e->getMessage()}");
-            return;
-        }
-
-        if ($article === null) {
-            $this->warn("No article found for '{$trend->term}'.");
-            return;
-        }
-
-        TrendArticle::create([
-            'trend_id' => $trend->id,
-            'url' => $article['url'],
-            'site_name' => $article['site_name'],
-            'title' => $article['title'],
-            'published_at' => $article['published_at'] ?? null,
-            'position' => 1,
-            'fetched_at' => now(),
-        ]);
-
-        $this->articlesResolved++;
     }
 }
