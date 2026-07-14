@@ -12,7 +12,13 @@ class FakeTrendsClient implements TrendsClientInterface
 
     public function stubSuccess(array $results): void
     {
-        $this->results = $results;
+        $this->results['*'] = $results;
+        $this->exception = null;
+    }
+
+    public function stubSuccessForRegion(string $regionCode, array $results): void
+    {
+        $this->results[$regionCode] = $results;
         $this->exception = null;
     }
 
@@ -28,6 +34,6 @@ class FakeTrendsClient implements TrendsClientInterface
             throw $this->exception;
         }
 
-        return $this->results;
+        return $this->results[$regionCode] ?? $this->results['*'] ?? [];
     }
 }
