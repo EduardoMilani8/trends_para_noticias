@@ -35,4 +35,8 @@ return [
         ],
     ],
 
+    'serpapi' => [
+        'key' => env('SERPAPI_KEY'),
+    ],
+
 ];
