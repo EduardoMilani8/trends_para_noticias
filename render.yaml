@@ -1,0 +1,84 @@
+# Render Blueprint — TrendNews
+# Docs: https://render.com/docs/blueprint-spec
+
+services:
+  # ── Web Service ──────────────────────────────────────────────
+  - type: web
+    name: trends-web
+    env: php
+    buildCommand: composer install --no-dev --no-interaction --prefer-dist && npm ci && npm run build
+    startCommand: php artisan migrate --force && php artisan serve --host=0.0.0.0 --port=$PORT
+    autoDeploy: true
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: APP_DEBUG
+        value: "false"
+      - key: APP_KEY
+        sync: false
+      - key: SERPAPI_KEY
+        sync: false
+      - key: QUEUE_CONNECTION
+        value: database
+      - key: SESSION_DRIVER
+        value: database
+      - key: CACHE_STORE
+        value: database
+    databases:
+      - name: trends-db
+
+  # ── Background Worker ───────────────────────────────────────
+  - type: worker
+    name: trends-worker
+    env: php
+    buildCommand: composer install --no-dev --no-interaction --prefer-dist
+    startCommand: php artisan queue:work --tries=3
+    autoDeploy: true
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: APP_DEBUG
+        value: "false"
+      - key: APP_KEY
+        sync: false
+      - key: SERPAPI_KEY
+        sync: false
+      - key: QUEUE_CONNECTION
+        value: database
+      - key: SESSION_DRIVER
+        value: database
+      - key: CACHE_STORE
+        value: database
+    databases:
+      - name: trends-db
+
+  # ── Cron Job (coleta a cada 3h) ─────────────────────────────
+  - type: cron
+    name: trends-cron
+    env: php
+    schedule: "0 */3 * * *"
+    buildCommand: composer install --no-dev --no-interaction --prefer-dist
+    startCommand: php artisan migrate --force && php artisan trends:collect
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: APP_DEBUG
+        value: "false"
+      - key: APP_KEY
+        sync: false
+      - key: SERPAPI_KEY
+        sync: false
+      - key: QUEUE_CONNECTION
+        value: database
+      - key: SESSION_DRIVER
+        value: database
+      - key: CACHE_STORE
+        value: database
+    databases:
+      - name: trends-db
+
+# ── Banco de dados gerenciado ────────────────────────────────
+databases:
+  - name: trends-db
+    plan: free
+    databaseName: trends
