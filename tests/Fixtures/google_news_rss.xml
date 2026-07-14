@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Notícias</title>
+    <link>https://news.google.com</link>
+    <description>Resultados da pesquisa</description>
+    <item>
+      <title>Flamengo vence o Brasileirão após grande campanha - Globo</title>
+      <link>https://globo.com/flamengo-campeao</link>
+      <guid isPermaLink="false">abc123</guid>
+      <pubDate>Mon, 14 Jul 2025 12:00:00 GMT</pubDate>
+    </item>
+    <item>
+      <title>Flamengo conquista título nacional - UOL</title>
+      <link>https://uol.com.br/flamengo</link>
+      <guid isPermaLink="false">def456</guid>
+      <pubDate>Mon, 14 Jul 2025 11:30:00 GMT</pubDate>
+    </item>
+    <item>
+      <title>Equipe celebra com torcida - ESPN</title>
+      <link>https://espn.com.br/flamengo</link>
+      <guid isPermaLink="false">ghi789</guid>
+      <pubDate>Mon, 14 Jul 2025 11:00:00 GMT</pubDate>
+    </item>
+  </channel>
+</rss>
