@@ -23,8 +23,8 @@ class SerpApiTrendsClientTest extends TestCase
         Http::fake([
             'https://serpapi.com/search.json*' => Http::response([
                 'trending_searches' => [
-                    ['query' => 'Flamengo', 'rank' => 1, 'search_volume' => 100000],
-                    ['query' => 'Lula', 'rank' => 2, 'search_volume' => null],
+                    ['query' => 'Flamengo', 'search_volume' => 100000],
+                    ['query' => 'Lula', 'search_volume' => null],
                 ],
             ], 200),
         ]);
@@ -36,6 +36,7 @@ class SerpApiTrendsClientTest extends TestCase
         $this->assertEquals(1, $result[0]['rank']);
         $this->assertEquals(100000, $result[0]['search_volume']);
         $this->assertEquals('Lula', $result[1]['term']);
+        $this->assertEquals(2, $result[1]['rank']);
         $this->assertNull($result[1]['search_volume']);
 
         Http::assertSent(function ($request) {

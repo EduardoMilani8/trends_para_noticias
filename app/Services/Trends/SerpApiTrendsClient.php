@@ -31,10 +31,10 @@ class SerpApiTrendsClient implements TrendsClientInterface
 
         $data = $response->json('trending_searches', []);
 
-        return array_map(fn (array $item) => [
+        return array_map(fn (int $i, array $item) => [
             'term' => $item['query'],
-            'rank' => $item['rank'],
+            'rank' => $i + 1,
             'search_volume' => $item['search_volume'] ?? null,
-        ], $data);
+        ], array_keys($data), $data);
     }
 }
